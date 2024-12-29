@@ -1,45 +1,68 @@
+import os
+from dotenv import load_dotenv
+from langchain_openai.chat_models import ChatOpenAI
 from langchain_core.messages import HumanMessage
 from agents.state import AgentState, show_agent_reasoning
 import json
+
+# Load environment variables
+load_dotenv()
+
+# Initialize the OpenAI model with explicit API key
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    openai_api_key=os.getenv("OPENAI_API_KEY"),
+    temperature=0
+)
 
 def valuation_agent(state: AgentState):
     """Performs detailed valuation analysis using multiple methodologies."""
     show_reasoning = state["metadata"]["show_reasoning"]
     data = state["data"]
-    metrics = data["financial_metrics"][0]
-    current_financial_line_item = data["financial_line_items"][0]
-    previous_financial_line_item = data["financial_line_items"][1]
-    market_cap = data["market_cap"]
+    metrics = data["financial_metrics"][0] if data["financial_metrics"] else {}
+    
+    # Safely get financial line items with fallbacks
+    current_financial_line_item = data["financial_line_items"][0] if data["financial_line_items"] else {}
+    previous_financial_line_item = data["financial_line_items"][1] if len(data["financial_line_items"]) > 1 else {}
+    market_cap = data.get("market_cap", 0)
 
     reasoning = {}
 
-    # Calculate working capital change
-    working_capital_change = current_financial_line_item.get('working_capital', 0) - previous_financial_line_item.get('working_capital', 0)
+    # Calculate working capital change with safe access
+    current_wc = current_financial_line_item.get('working_capital', 0)
+    previous_wc = previous_financial_line_item.get('working_capital', 0)
+    working_capital_change = current_wc - previous_wc
     
     # Owner Earnings Valuation (Buffett Method)
     owner_earnings_value = calculate_owner_earnings_value(
-        net_income=current_financial_line_item.get('net_income'),
-        depreciation=current_financial_line_item.get('depreciation_and_amortization'),
-        capex=current_financial_line_item.get('capital_expenditure'),
+        net_income=current_financial_line_item.get('net_income', 0),
+        depreciation=current_financial_line_item.get('depreciation_and_amortization', 0),
+        capex=current_financial_line_item.get('capital_expenditure', 0),
         working_capital_change=working_capital_change,
-        growth_rate=metrics["earnings_growth"],
+        growth_rate=metrics.get("earnings_growth", 0.03),  # Default to 3% growth if missing
         required_return=0.15,
         margin_of_safety=0.25
     )
     
     # DCF Valuation
     dcf_value = calculate_intrinsic_value(
-        free_cash_flow=current_financial_line_item.get('free_cash_flow'),
-        growth_rate=metrics["earnings_growth"],
+        free_cash_flow=current_financial_line_item.get('free_cash_flow', 0),
+        growth_rate=metrics.get("earnings_growth", 0.03),  # Default to 3% growth if missing
         discount_rate=0.10,
         terminal_growth_rate=0.03,
         num_years=5,
     )
     
     # Calculate combined valuation gap (average of both methods)
-    dcf_gap = (dcf_value - market_cap) / market_cap
-    owner_earnings_gap = (owner_earnings_value - market_cap) / market_cap
-    valuation_gap = (dcf_gap + owner_earnings_gap) / 2
+    # Avoid division by zero
+    if market_cap > 0:
+        dcf_gap = (dcf_value - market_cap) / market_cap
+        owner_earnings_gap = (owner_earnings_value - market_cap) / market_cap
+        valuation_gap = (dcf_gap + owner_earnings_gap) / 2
+    else:
+        dcf_gap = 0
+        owner_earnings_gap = 0
+        valuation_gap = 0
 
     if valuation_gap > 0.15:  # More than 15% undervalued
         signal = 'bullish'

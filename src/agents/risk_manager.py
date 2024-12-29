@@ -1,5 +1,7 @@
+import os
+from dotenv import load_dotenv
 import math
-
+from langchain_openai.chat_models import ChatOpenAI
 from langchain_core.messages import HumanMessage
 
 from agents.state import AgentState, show_agent_reasoning
@@ -7,6 +9,16 @@ from tools.api import prices_to_df
 
 import json
 import ast
+
+# Load environment variables
+load_dotenv()
+
+# Initialize the OpenAI model with explicit API key
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    openai_api_key=os.getenv("OPENAI_API_KEY"),
+    temperature=0
+)
 
 ##### Risk Management Agent #####
 def risk_management_agent(state: AgentState):

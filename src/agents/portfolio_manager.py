@@ -1,9 +1,21 @@
 from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai.chat_models import ChatOpenAI
+import os
+from dotenv import load_dotenv
+import json
 
 from agents.state import AgentState, show_agent_reasoning
 
+# Load environment variables
+load_dotenv()
+
+# Initialize the OpenAI model with explicit API key
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    openai_api_key=os.getenv("OPENAI_API_KEY"),
+    temperature=0
+)
 
 ##### Portfolio Management Agent #####
 def portfolio_management_agent(state: AgentState):
@@ -108,7 +120,6 @@ def portfolio_management_agent(state: AgentState):
         }
     )
     # Invoke the LLM
-    llm = ChatOpenAI(model="gpt-4o")
     result = llm.invoke(prompt)
 
     # Create the portfolio management message

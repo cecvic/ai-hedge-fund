@@ -1,16 +1,24 @@
+import os
+from dotenv import load_dotenv
 import math
 from typing import Dict
-
+from langchain_openai.chat_models import ChatOpenAI
 from langchain_core.messages import HumanMessage
-
 from agents.state import AgentState, show_agent_reasoning
-
 import json
 import pandas as pd
 import numpy as np
-
 from tools.api import prices_to_df
 
+# Load environment variables
+load_dotenv()
+
+# Initialize the OpenAI model with explicit API key
+llm = ChatOpenAI(
+    model="gpt-4o-mini",
+    openai_api_key=os.getenv("OPENAI_API_KEY"),
+    temperature=0
+)
 
 ##### Technical Analyst #####
 def technical_analyst_agent(state: AgentState):

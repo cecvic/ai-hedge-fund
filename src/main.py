@@ -1,3 +1,5 @@
+import os
+from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
 
@@ -13,6 +15,14 @@ from agents.valuation import valuation_agent
 import argparse
 from datetime import datetime
 
+# Load environment variables from .env file
+load_dotenv()
+
+# Verify environment variables are loaded
+if not os.getenv("OPENAI_API_KEY"):
+    raise ValueError("OPENAI_API_KEY environment variable is not set")
+if not os.getenv("ALPHA_VANTAGE_API_KEY"):
+    raise ValueError("ALPHA_VANTAGE_API_KEY environment variable is not set")
 
 ##### Run the Hedge Fund #####
 def run_hedge_fund(ticker: str, start_date: str, end_date: str, portfolio: dict, show_reasoning: bool = False):
