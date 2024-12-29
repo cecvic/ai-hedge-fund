@@ -4,6 +4,49 @@ import pandas as pd
 import requests
 from datetime import datetime, timedelta
 
+# Constants
+BASE_URL = "https://www.alphavantage.co/query"
+ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
+
+def validate_api_key():
+    """Validate that the Alpha Vantage API key is set and working."""
+    if not ALPHA_VANTAGE_API_KEY:
+        raise ValueError(
+            "Alpha Vantage API key not found. Please set the ALPHA_VANTAGE_API_KEY environment variable."
+        )
+    
+    # Test the API key with a simple request
+    test_url = f"{BASE_URL}/TIME_SERIES_DAILY"
+    params = {
+        "function": "TIME_SERIES_DAILY",
+        "symbol": "AAPL",  # Use AAPL as a test
+        "apikey": ALPHA_VANTAGE_API_KEY,
+        "outputsize": "compact"
+    }
+    
+    try:
+        response = requests.get(test_url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        
+        if "Note" in data:
+            raise ValueError(f"API Key error: {data['Note']}")
+        if "Error Message" in data:
+            raise ValueError(f"API Key error: {data['Error Message']}")
+            
+        return True
+    except requests.RequestException as e:
+        raise ValueError(f"Failed to validate API key: {str(e)}")
+    except ValueError as e:
+        raise ValueError(f"Invalid API key: {str(e)}")
+
+# Validate API key on module import
+try:
+    validate_api_key()
+except ValueError as e:
+    print(f"\nWarning: {str(e)}")
+    print("Some functionality may be limited or unavailable.")
+
 def get_api_key() -> str:
     """Get Alpha Vantage API key from environment variables."""
     api_key = os.environ.get("ALPHA_VANTAGE_API_KEY")
@@ -11,42 +54,66 @@ def get_api_key() -> str:
         raise ValueError("ALPHA_VANTAGE_API_KEY environment variable is not set")
     return api_key
 
-def get_prices(
-    ticker: str,
-    start_date: str,
-    end_date: str
-) -> List[Dict[str, Any]]:
-    """Fetch daily price data from Alpha Vantage."""
-    api_key = get_api_key()
-    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={ticker}&outputsize=full&apikey={api_key}"
-    
-    response = requests.get(url)
-    if response.status_code != 200:
-        raise Exception(f"Error fetching data: {response.status_code} - {response.text}")
-    
-    data = response.json()
-    time_series = data.get("Time Series (Daily)")
-    if not time_series:
-        raise ValueError("No price data returned")
-    
-    # Convert to list of dictionaries and filter by date
-    prices = []
-    start = datetime.strptime(start_date, "%Y-%m-%d")
-    end = datetime.strptime(end_date, "%Y-%m-%d")
-    
-    for date_str, values in time_series.items():
-        date = datetime.strptime(date_str, "%Y-%m-%d")
-        if start <= date <= end:
-            prices.append({
-                "time": date_str,
-                "open": float(values["1. open"]),
-                "high": float(values["2. high"]),
-                "low": float(values["3. low"]),
-                "close": float(values["4. close"]),
-                "volume": int(values["5. volume"])
-            })
-    
-    return sorted(prices, key=lambda x: x["time"])
+def get_prices(ticker: str, start_date: str = None, end_date: str = None) -> List[Dict[str, Any]]:
+    """Get historical price data from Alpha Vantage."""
+    try:
+        url = f"{BASE_URL}/TIME_SERIES_DAILY"
+        params = {
+            "function": "TIME_SERIES_DAILY",
+            "symbol": ticker,
+            "apikey": ALPHA_VANTAGE_API_KEY,
+            "outputsize": "full"
+        }
+        
+        print(f"\nFetching price data for {ticker}...")
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        # Debug information
+        print(f"Response status code: {response.status_code}")
+        print(f"Response headers: {response.headers}")
+        print("Response keys:", list(data.keys()))
+        
+        if "Time Series (Daily)" not in data:
+            print(f"Error: Unexpected API response format. Data received: {data}")
+            if "Note" in data:
+                print(f"API Note: {data['Note']}")
+            if "Information" in data:
+                print(f"API Information: {data['Information']}")
+            raise ValueError("Invalid API response format")
+
+        time_series = data["Time Series (Daily)"]
+        
+        # Convert to list of records
+        prices = []
+        for date, values in time_series.items():
+            if (not start_date or date >= start_date) and (not end_date or date <= end_date):
+                prices.append({
+                    "date": date,
+                    "open": float(values["1. open"]),
+                    "high": float(values["2. high"]),
+                    "low": float(values["3. low"]),
+                    "close": float(values["4. close"]),
+                    "volume": int(values["5. volume"])
+                })
+        
+        if not prices:
+            print(f"Warning: No price data found for {ticker} between {start_date} and {end_date}")
+            return []
+            
+        print(f"Successfully fetched {len(prices)} price records")
+        return sorted(prices, key=lambda x: x["date"])
+        
+    except requests.RequestException as e:
+        print(f"Error fetching price data: {str(e)}")
+        if hasattr(e.response, 'text'):
+            print(f"Response text: {e.response.text}")
+        return []
+    except (KeyError, ValueError) as e:
+        print(f"Error parsing price data: {str(e)}")
+        return []
 
 def get_company_overview(ticker: str) -> Dict[str, Any]:
     """Fetch company overview data from Alpha Vantage."""
